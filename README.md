@@ -5,7 +5,7 @@ Dự án Spring Boot (Gradle, Java 21) tối giản dùng để minh họa workf
 - `test`: chạy JUnit test bằng Gradle và đóng gói file JAR.
 - `docker-build`: chỉ chạy khi `test` thành công; đăng nhập `ghcr.io`, build và push Docker image.
 
-Trạng thái CI: (cập nhật sau khi push)
+Trạng thái CI: run trên `main` (ID 38175864346) có job `Test Gradle` thành công (1m19s, artifact `app-jar` và `test-report`), job `Build and Push Docker Image` dừng ở bước đăng nhập GHCR với `Password required` vì chưa có secret `REGISTRY_TOKEN`. Run trên nhánh `break-test` (ID 38175882763) có test đỏ và job `docker-build` ở trạng thái skipped, chứng minh tác dụng của `needs: test`. Chi tiết ở mục 9 của báo cáo. Actions: https://github.com/letoan0902/DevOps-Session11-bai5/actions
 
 ## Chạy thử trên máy local
 

@@ -363,7 +363,116 @@ Bước đăng nhập dùng `password: ${{ secrets.REGISTRY_TOKEN }}`. Đây là
 
 ## 9. Kết quả chạy thật trên GitHub Actions
 
-(người điều phối cập nhật sau khi push)
+Repo: https://github.com/letoan0902/DevOps-Session11-bai5 (tab Actions: https://github.com/letoan0902/DevOps-Session11-bai5/actions). Kết quả dưới đây lấy từ `gh run view` và API `actions/runs/<id>/jobs` ngay sau khi push.
+
+### 9.1. Run trên nhánh `main` (commit đầu tiên, ID 38175864346)
+
+```text
+$ gh run view 38175864346 --repo letoan0902/DevOps-Session11-bai5
+X main CI - Test Gradle va Build/Push Docker Image . 38175864346
+Triggered via push
+
+JOBS
+V Test Gradle in 1m19s (ID 114578006235)
+X Build and Push Docker Image in 19s (ID 114578292930)
+  V Set up job
+  V Checkout mã nguồn
+  V Thiết lập Docker Buildx
+  X Đăng nhập GitHub Container Registry
+  - Sinh metadata cho image
+  - Build và push image
+  V Post Đăng nhập GitHub Container Registry
+  V Complete job
+
+ANNOTATIONS
+X Password required
+Build and Push Docker Image: .github#11
+
+ARTIFACTS
+test-report
+app-jar
+```
+
+```text
+$ gh api repos/letoan0902/DevOps-Session11-bai5/actions/runs/38175864346/jobs     -q '.jobs[] | "\(.name): status=\(.status) conclusion=\(.conclusion)"'
+Test Gradle: status=completed conclusion=success
+Build and Push Docker Image: status=completed conclusion=failure
+```
+
+Trích log job `Test Gradle`:
+
+```text
+> Task :test
+BUILD SUCCESSFUL in 33s
+> Task :bootJar
+BUILD SUCCESSFUL in 8s
+Artifact app-jar.zip successfully finalized. Artifact ID 11715981999
+```
+
+Đọc kết quả:
+
+- Job `test` xanh: JUnit chạy đủ 2 test, JAR `app.jar` được đóng gói và tải lên artifact `app-jar`, báo cáo test tải lên artifact `test-report`.
+- Vì `test` thành công nên `needs: test` cho phép job `docker-build` khởi động (trên sơ đồ workflow có mũi tên nối từ `Test Gradle` sang `Build and Push Docker Image`). Job này chạy được các bước checkout và Buildx, rồi dừng ở bước đăng nhập với thông báo `Password required`, vì repository chưa có secret `REGISTRY_TOKEN` (học viên tự tạo theo bài 4). Hai bước metadata và build-push bị bỏ qua theo thiết kế của GitHub Actions khi bước trước thất bại.
+- Sau khi tạo secret `REGISTRY_TOKEN` và Re-run jobs, job `docker-build` sẽ đăng nhập thành công và đẩy image `ghcr.io/letoan0902/devops-session11-bai5` với tag `sha-<7 ký tự>` và `latest`.
+
+### 9.2. Run trên nhánh `break-test` (cố ý làm đứt JUnit test, ID 38175882763)
+
+Nhánh `break-test` sửa một dòng trong `HelloControllerTest.java`: kỳ vọng `version` đổi từ `1.0.0` thành `9.9.9` (đúng nội dung `break_test.patch`).
+
+```text
+$ gh run view 38175882763 --repo letoan0902/DevOps-Session11-bai5
+X break-test CI - Test Gradle va Build/Push Docker Image . 38175882763
+Triggered via push
+
+JOBS
+X Test Gradle in 1m5s (ID 114578059555)
+  V Set up job
+  V Checkout mã nguồn
+  V Cài đặt JDK 21
+  V Cài đặt Gradle 8.10
+  X Chạy JUnit test
+  - Đóng gói JAR
+  - Lưu file JAR
+  V Lưu báo cáo test
+  V Complete job
+- Build and Push Docker Image in 0s (ID 114578302124)
+
+ANNOTATIONS
+X Process completed with exit code 1.
+Test Gradle: .github#63
+
+ARTIFACTS
+test-report
+```
+
+```text
+$ gh api repos/letoan0902/DevOps-Session11-bai5/actions/runs/38175882763/jobs     -q '.jobs[] | "\(.name): status=\(.status) conclusion=\(.conclusion)"'
+Test Gradle: status=completed conclusion=failure
+Build and Push Docker Image: status=completed conclusion=skipped
+```
+
+Trích log bước `Chạy JUnit test`:
+
+```text
+HelloControllerTest > versionReturnsExpectedJson() FAILED
+2 tests completed, 1 failed
+> Task :test FAILED
+BUILD FAILED in 43s
+```
+
+Đọc kết quả:
+
+- Job `test` đỏ ở bước JUnit, các bước đóng gói JAR bị bỏ qua, nhưng bước `Lưu báo cáo test` vẫn chạy nhờ `if: always()`.
+- Job `docker-build` có `conclusion=skipped`, thời gian chạy 0s: đây chính là tác dụng của `needs: test`. Trên tab Actions, ô `Build and Push Docker Image` hiển thị trạng thái Skipped với biểu tượng gạch ngang màu xám.
+
+### 9.3. Bảng tổng hợp
+
+| Nhánh | Job test | Job docker-build | Ý nghĩa |
+|---|---|---|---|
+| `main` | success (1m19s) | failure ở bước đăng nhập (chưa có secret `REGISTRY_TOKEN`) | `needs` cho phép job 2 chạy khi job 1 xanh |
+| `break-test` | failure ở bước JUnit | skipped (0s) | `needs` chặn job 2 khi job 1 đỏ |
+
+Ảnh chụp sơ đồ workflow được thay bằng các khối kết quả dạng văn bản ở trên; sơ đồ 2 job với mũi tên nối xem trực tiếp tại trang Actions của từng run.
 
 ## 10. Xử lý sự cố
 
