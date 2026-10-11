@@ -394,7 +394,7 @@ app-jar
 ```
 
 ```text
-$ gh api repos/letoan0902/DevOps-Session11-bai5/actions/runs/38175864346/jobs     -q '.jobs[] | "\(.name): status=\(.status) conclusion=\(.conclusion)"'
+$ gh api repos/letoan0902/DevOps-Session11-bai5/actions/runs/38175864346/jobs -q '.jobs[] | "\(.name): status=\(.status) conclusion=\(.conclusion)"'
 Test Gradle: status=completed conclusion=success
 Build and Push Docker Image: status=completed conclusion=failure
 ```
@@ -446,7 +446,7 @@ test-report
 ```
 
 ```text
-$ gh api repos/letoan0902/DevOps-Session11-bai5/actions/runs/38175882763/jobs     -q '.jobs[] | "\(.name): status=\(.status) conclusion=\(.conclusion)"'
+$ gh api repos/letoan0902/DevOps-Session11-bai5/actions/runs/38175882763/jobs -q '.jobs[] | "\(.name): status=\(.status) conclusion=\(.conclusion)"'
 Test Gradle: status=completed conclusion=failure
 Build and Push Docker Image: status=completed conclusion=skipped
 ```
