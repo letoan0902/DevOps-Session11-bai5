@@ -1,0 +1,111 @@
+name: CI - Test Gradle va Build/Push Docker Image
+
+# Kích hoạt khi push lên bất kỳ nhánh nào, khi có pull request, hoặc chạy tay.
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+  workflow_dispatch:
+
+# Quyền tối thiểu cho GITHUB_TOKEN: đọc mã nguồn và ghi package (ghcr.io).
+permissions:
+  contents: read
+  packages: write
+
+env:
+  # Tên image trên GitHub Container Registry.
+  # Lưu ý: tên image bắt buộc là chữ thường. Nếu tên tài khoản/repo có chữ hoa,
+  # docker/metadata-action ở job docker-build sẽ tự chuyển về chữ thường khi sinh tag.
+  IMAGE_NAME: ghcr.io/${{ github.repository }}
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # Job 1: chạy JUnit test bằng Gradle và đóng gói file JAR.
+  # ---------------------------------------------------------------------------
+  test:
+    name: Test Gradle
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout mã nguồn
+        uses: actions/checkout@v5
+
+      - name: Cài đặt JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      # Repo không commit gradle-wrapper.jar (file nhị phân) nên cài Gradle trực tiếp.
+      - name: Cài đặt Gradle 8.10
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.10"
+
+      - name: Chạy JUnit test
+        run: gradle test --no-daemon
+
+      - name: Đóng gói JAR
+        run: gradle bootJar --no-daemon
+
+      - name: Lưu file JAR
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-jar
+          path: build/libs/app.jar
+
+      # if: always() để báo cáo test vẫn được tải lên cả khi test thất bại.
+      - name: Lưu báo cáo test
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-report
+          path: build/reports/tests/test
+
+  # ---------------------------------------------------------------------------
+  # Job 2: đóng gói Docker image và đẩy lên ghcr.io.
+  # ---------------------------------------------------------------------------
+  docker-build:
+    name: Build and Push Docker Image
+    # needs: test là ràng buộc thứ tự giữa 2 job.
+    # - docker-build chỉ bắt đầu SAU KHI job test kết thúc với trạng thái thành công.
+    # - Nếu test thất bại (hoặc bị hủy), docker-build KHÔNG chạy và hiện trạng thái Skipped.
+    # - Trên sơ đồ tab Actions xuất hiện mũi tên từ test sang docker-build.
+    # Mặc định needs đã hàm ý điều kiện success(); không cần viết thêm if: success().
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout mã nguồn
+        uses: actions/checkout@v5
+
+      - name: Thiết lập Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      # Đăng nhập ghcr.io bằng secret REGISTRY_TOKEN (Personal Access Token tạo ở bài 4).
+      # Với pull request thì không push nên bỏ qua bước đăng nhập (PR từ fork không có secret).
+      - name: Đăng nhập GitHub Container Registry
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.REGISTRY_TOKEN }}
+
+      # Sinh tag và label cho image, tự chuyển tên image về chữ thường.
+      - name: Sinh metadata cho image
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.IMAGE_NAME }}
+          tags: |
+            type=sha
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - name: Build và push image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
