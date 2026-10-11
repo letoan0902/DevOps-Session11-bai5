@@ -31,6 +31,6 @@ class HelloControllerTest {
         mockMvc.perform(get("/api/version"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.app").value("devops-session11-bai5"))
-                .andExpect(jsonPath("$.version").value("1.0.0"));
+                .andExpect(jsonPath("$.version").value("9.9.9"));
     }
 }
